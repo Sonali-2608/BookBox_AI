@@ -10,7 +10,7 @@ import {
   ArrowLeft,
   Sparkles,
 } from "lucide-react";
-import { booksApi } from "../services/api.js";
+import { booksApi, aiApi } from "../services/api.js";
 import LoadingSkeleton from "../components/LoadingSkeleton.jsx";
 import RecommendationCarousel from "../components/RecommendationCarousel.jsx";
 
@@ -41,34 +41,52 @@ export default function BookDetails() {
   const { id } = useParams();
   const [book, setBook] = useState(null);
   const [status, setStatus] = useState("loading"); // loading | ready | not-found | error
+
   const [similarBooks, setSimilarBooks] = useState(null);
+  const [whyExplanation, setWhyExplanation] = useState(null);
+  const [whyLoading, setWhyLoading] = useState(true);
+  const [summaryData, setSummaryData] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    let bookFetched = false;
     setStatus("loading");
     setSimilarBooks(null);
+    setWhyExplanation(null);
+    setWhyLoading(true);
+    setSummaryData(null);
+    setSummaryLoading(true);
 
     booksApi
       .getById(id)
       .then((res) => {
         if (cancelled) return;
-        bookFetched = true;
         setBook(res.data);
         setStatus("ready");
-        return booksApi.getSimilar(id, 10);
-      })
-      .then((res) => {
-        if (cancelled || !res) return;
-        setSimilarBooks(res.data.results);
+
+        // These three are independent — fire in parallel, each with its
+        // own quiet failure so one slow/broken AI call doesn't block the
+        // others or the book itself from rendering.
+        booksApi
+          .getSimilar(id, 10)
+          .then((r) => !cancelled && setSimilarBooks(r.data.results))
+          .catch(() => !cancelled && setSimilarBooks([]));
+
+        aiApi
+          .getWhy(id)
+          .then((r) => !cancelled && setWhyExplanation(r.data.explanation))
+          .catch(() => !cancelled && setWhyExplanation(null))
+          .finally(() => !cancelled && setWhyLoading(false));
+
+        aiApi
+          .getSummary(id)
+          .then((r) => !cancelled && setSummaryData(r.data))
+          .catch(() => !cancelled && setSummaryData(null))
+          .finally(() => !cancelled && setSummaryLoading(false));
       })
       .catch((err) => {
         if (cancelled) return;
-        if (!bookFetched) {
-          setStatus(err.response?.status === 404 ? "not-found" : "error");
-        } else {
-          setSimilarBooks([]); // similar-books fetch failed; fail quiet, book itself is fine
-        }
+        setStatus(err.response?.status === 404 ? "not-found" : "error");
       });
 
     return () => {
@@ -189,10 +207,63 @@ export default function BookDetails() {
               <p className="font-display text-base font-medium text-parchment-ink">
                 Why Lexora recommends this
               </p>
-              <p className="text-xs text-parchment-ink/55">
-                A personalized, AI-written explanation arrives once the reading assistant
-                (Phase 7) is live.
-              </p>
+              {whyLoading && <p className="text-xs text-parchment-ink/40">Thinking…</p>}
+              {!whyLoading && whyExplanation && (
+                <p className="text-sm text-parchment-ink/75">{whyExplanation}</p>
+              )}
+              {!whyLoading && !whyExplanation && (
+                <p className="text-xs text-parchment-ink/55">
+                  Add a few favorite genres or authors and Lexora can explain why a book fits
+                  you.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-10">
+            <h2 className="font-display text-lg font-medium text-parchment">AI summary</h2>
+            <div className="mt-4">
+              {summaryLoading && <LoadingSkeleton count={1} variant="line" />}
+              {!summaryLoading && summaryData?.summary && (
+                <div className="catalog-card p-6">
+                  <p className="text-sm leading-relaxed text-parchment-ink/80">
+                    {summaryData.summary}
+                  </p>
+
+                  {summaryData.key_takeaways?.length > 0 && (
+                    <>
+                      <div className="catalog-card__rule" />
+                      <p className="call-number mt-3">Key takeaways</p>
+                      <ul className="mt-2 space-y-1.5">
+                        {summaryData.key_takeaways.map((takeaway, i) => (
+                          <li
+                            key={i}
+                            className="flex gap-2 text-sm text-parchment-ink/75"
+                          >
+                            <span className="text-brass-dark">•</span>
+                            {takeaway}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+
+                  {summaryData.target_audience && (
+                    <>
+                      <div className="catalog-card__rule" />
+                      <p className="call-number mt-3">Who it's for</p>
+                      <p className="mt-1 text-sm text-parchment-ink/75">
+                        {summaryData.target_audience}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+              {!summaryLoading && !summaryData?.summary && (
+                <p className="text-sm text-parchment/50">
+                  No AI summary available for this book yet.
+                </p>
+              )}
             </div>
           </div>
 

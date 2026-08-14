@@ -1,9 +1,9 @@
 """
 Application configuration.
 
-All values are loaded from environment variables (or a local .env file that
-is NEVER committed to git). See .env.example at the project root for the
-full list of variables this app expects.
+All values are loaded from environment variables (or a local .env file
+that is NEVER committed to git). See .env.example at the project root
+for the full list of variables this app expects.
 """
 
 from typing import Optional
@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     # AI / external APIs (later phases)
     GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     GOOGLE_BOOKS_API_KEY: Optional[str] = None
 
     # URLs

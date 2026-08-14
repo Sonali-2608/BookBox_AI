@@ -248,13 +248,22 @@ export default function Landing() {
             whileInView={{ x: 0, opacity: 1 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="catalog-card flex aspect-[4/3] flex-col items-center justify-center gap-3 p-8 text-center"
+            className="catalog-card flex aspect-[4/3] flex-col items-center justify-center gap-4 p-8 text-center"
           >
             <Camera className="h-10 w-10 text-moss-dark/60" strokeWidth={1.5} />
-            <p className="call-number">Scanner preview — Phase 8</p>
+            <p className="call-number">Ready to try</p>
             <p className="max-w-xs text-sm text-parchment-ink/60">
-              The full upload-and-match flow lands once the OCR pipeline is built.
+              Sign in and upload a photo of your own shelf — Lexora will read the spines
+              and match them against the catalog in seconds.
             </p>
+            {isAuthenticated ? (
+              <Link to="/scanner" className="brass-btn">
+                Open the scanner
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            ) : (
+              <GoogleSignInButton redirectTo="/scanner" />
+            )}
           </motion.div>
         </div>
       </section>

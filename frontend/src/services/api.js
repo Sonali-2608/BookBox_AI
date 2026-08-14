@@ -55,3 +55,20 @@ export const booksApi = {
   getSimilar: (id, limit = 10) => api.get(`/books/similar/${id}`, { params: { limit } }),
   getRecommendations: (limit = 20) => api.get("/books/recommendations", { params: { limit } }),
 };
+
+export const aiApi = {
+  chat: (message) => api.post("/ai/chat", { message }),
+  getChatHistory: () => api.get("/ai/chat/history"),
+  getSummary: (bookId) => api.get(`/ai/summary/${bookId}`),
+  getWhy: (bookId) => api.get(`/ai/why/${bookId}`),
+};
+
+export const scannerApi = {
+  upload: (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post("/scanner/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+};

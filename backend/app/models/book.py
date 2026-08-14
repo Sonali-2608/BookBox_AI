@@ -37,5 +37,12 @@ class Book(Base):
     # regenerating embeddings for books we've already indexed.
     embedding_generated = Column(Integer, default=0, nullable=False)
 
+    # Cached Gemini-generated content (Phase 7). Shared across all users
+    # since a book's summary doesn't depend on who's asking — generated
+    # once on first request, never regenerated for the same book.
+    ai_summary = Column(Text, nullable=True)
+    ai_key_takeaways = Column(JSON, nullable=True)  # list[str]
+    ai_target_audience = Column(String, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

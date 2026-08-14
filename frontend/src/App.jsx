@@ -6,6 +6,8 @@ import Landing from "./pages/Landing.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Search from "./pages/Search.jsx";
 import BookDetails from "./pages/BookDetails.jsx";
+import Chat from "./pages/Chat.jsx";
+import Scanner from "./pages/Scanner.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 export default function App() {
@@ -25,6 +27,8 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/search" element={<Search />} />
         <Route path="/books/:id" element={<BookDetails />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/scanner" element={<Scanner />} />
       </Route>
 
       <Route

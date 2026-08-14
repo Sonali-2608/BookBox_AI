@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { SearchX, AlertCircle } from "lucide-react";
 import SearchBar from "../components/SearchBar.jsx";
 import BookCard from "../components/BookCard.jsx";
@@ -6,6 +7,10 @@ import LoadingSkeleton from "../components/LoadingSkeleton.jsx";
 import { booksApi } from "../services/api.js";
 
 export default function Search() {
+  const [searchParams] = useSearchParams();
+  const initialQuery = searchParams.get("q") || "";
+  const initialType = searchParams.get("type") || "keyword";
+
   const [results, setResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -28,6 +33,16 @@ export default function Search() {
     }
   }
 
+  // Supports arriving from the scanner's "couldn't confidently match"
+  // links (?q=...&type=...) by auto-running that search on load, so
+  // manual correction is a single click rather than a re-type.
+  useEffect(() => {
+    if (initialQuery) {
+      handleSearch(initialQuery, initialType);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="mx-auto max-w-6xl">
       <span className="eyebrow">Search</span>
@@ -40,7 +55,12 @@ export default function Search() {
       </p>
 
       <div className="mt-8">
-        <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+        <SearchBar
+          onSearch={handleSearch}
+          isLoading={isLoading}
+          initialQuery={initialQuery}
+          initialType={initialType}
+        />
       </div>
 
       <div className="mt-10">

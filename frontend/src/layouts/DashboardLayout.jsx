@@ -16,8 +16,8 @@ const navItems = [
   { label: "Search", icon: Search, to: "/search", enabled: true },
   { label: "Wishlist", icon: Heart, to: "/wishlist", enabled: false },
   { label: "Reading tracker", icon: BookMarked, to: "/reading", enabled: false },
-  { label: "Scanner", icon: ScanLine, to: "/scanner", enabled: false },
-  { label: "Ask Lexora", icon: MessageCircleHeart, to: "/chat", enabled: false },
+  { label: "Scanner", icon: ScanLine, to: "/scanner", enabled: true },
+  { label: "Ask Lexora", icon: MessageCircleHeart, to: "/chat", enabled: true },
   { label: "Analytics", icon: BarChart3, to: "/analytics", enabled: false },
 ];
 
