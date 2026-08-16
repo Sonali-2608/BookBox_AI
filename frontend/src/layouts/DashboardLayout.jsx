@@ -8,17 +8,19 @@ import {
   ScanLine,
   MessageCircleHeart,
   BarChart3,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth.js";
 
 const navItems = [
   { label: "Overview", icon: LayoutDashboard, to: "/dashboard", enabled: true },
   { label: "Search", icon: Search, to: "/search", enabled: true },
-  { label: "Wishlist", icon: Heart, to: "/wishlist", enabled: false },
-  { label: "Reading tracker", icon: BookMarked, to: "/reading", enabled: false },
+  { label: "Wishlist", icon: Heart, to: "/wishlist", enabled: true },
+  { label: "Reading tracker", icon: BookMarked, to: "/reading", enabled: true },
   { label: "Scanner", icon: ScanLine, to: "/scanner", enabled: true },
   { label: "Ask Lexora", icon: MessageCircleHeart, to: "/chat", enabled: true },
-  { label: "Analytics", icon: BarChart3, to: "/analytics", enabled: false },
+  { label: "Analytics", icon: BarChart3, to: "/analytics", enabled: true },
+  { label: "Preferences", icon: Settings, to: "/preferences", enabled: true },
 ];
 
 export default function DashboardLayout() {

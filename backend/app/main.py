@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routes import ai, auth, books, health, scanner
+from app.routes import ai, auth, books, health, scanner, user
 
 app = FastAPI(
     title="Lexora API",
@@ -23,6 +23,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(books.router, prefix="/api/books", tags=["books"])
 app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 app.include_router(scanner.router, prefix="/api/scanner", tags=["scanner"])
+app.include_router(user.router, prefix="/api/user", tags=["user"])
 
 
 @app.get("/")

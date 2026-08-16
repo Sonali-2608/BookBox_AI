@@ -1,10 +1,15 @@
+from datetime import datetime, timezone
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.book import Book
+from app.models.reading_history import ReadingHistory, ReadingStatus
 from app.models.recommendation import Recommendation
 from app.models.user import User
+from app.models.wishlist import Wishlist
 from app.recommendation.embedding_pipeline import ensure_book_embedded
 from app.recommendation.faiss_index import reconstruct, search as faiss_search
 from app.recommendation.scorer import get_recommendations
@@ -15,17 +20,26 @@ from app.schemas.book import (
     ScoredBookOut,
     SimilarBooksResponse,
 )
+from app.schemas.library import (
+    ReadingHistoryItemOut,
+    ReadingHistoryResponse,
+    ReadingStatusUpdateRequest,
+    WishlistAddRequest,
+    WishlistItemOut,
+    WishlistResponse,
+)
 from app.services.book_search import perform_book_search
 from app.utils.security import get_current_user
 
 router = APIRouter()
 
 VALID_SEARCH_TYPES = {"title", "author", "isbn", "genre", "keyword"}
+VALID_READING_STATUSES = {s.value for s in ReadingStatus}
 
-# NOTE: static-path routes (/search, /similar/{id}, /recommendations) must
-# be registered before the catch-all /{book_id} route below — otherwise
-# FastAPI tries to parse "recommendations" as an int and 422s instead of
-# matching this route.
+# NOTE: static-path routes (/search, /similar/{id}, /recommendations,
+# /wishlist, /reading-status) must be registered before the catch-all
+# /{book_id} route below — otherwise FastAPI tries to parse e.g.
+# "recommendations" as an int and 422s instead of matching this route.
 
 
 @router.get("/search", response_model=BookSearchResponse)
@@ -101,6 +115,164 @@ def get_recommendations_route(
         for book, score, reason in scored
     ]
     return RecommendationsResponse(count=len(results), results=results)
+
+
+@router.get("/wishlist", response_model=WishlistResponse)
+def get_wishlist(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    items = (
+        db.query(Wishlist)
+        .filter(Wishlist.user_id == current_user.id)
+        .order_by(Wishlist.created_at.desc())
+        .all()
+    )
+    return WishlistResponse(
+        count=len(items),
+        items=[
+            WishlistItemOut(book=BookOut.model_validate(w.book), added_at=w.created_at)
+            for w in items
+        ],
+    )
+
+
+@router.post("/wishlist", response_model=WishlistItemOut, status_code=201)
+def add_to_wishlist(
+    payload: WishlistAddRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    book = db.query(Book).filter(Book.id == payload.book_id).first()
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    existing = (
+        db.query(Wishlist)
+        .filter(Wishlist.user_id == current_user.id, Wishlist.book_id == book.id)
+        .first()
+    )
+    if existing:
+        return WishlistItemOut(book=BookOut.model_validate(book), added_at=existing.created_at)
+
+    entry = Wishlist(user_id=current_user.id, book_id=book.id)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return WishlistItemOut(book=BookOut.model_validate(book), added_at=entry.created_at)
+
+
+@router.delete("/wishlist/{book_id}", status_code=204)
+def remove_from_wishlist(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    entry = (
+        db.query(Wishlist)
+        .filter(Wishlist.user_id == current_user.id, Wishlist.book_id == book_id)
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Book is not in your wishlist")
+    db.delete(entry)
+    db.commit()
+    return None
+
+
+def _reading_history_out(book: Book, entry: ReadingHistory) -> ReadingHistoryItemOut:
+    return ReadingHistoryItemOut(
+        book=BookOut.model_validate(book),
+        status=entry.status.value,
+        started_at=entry.started_at,
+        completed_at=entry.completed_at,
+        updated_at=entry.updated_at,
+    )
+
+
+@router.get("/reading-status", response_model=ReadingHistoryResponse)
+def get_reading_history(
+    status: Optional[str] = Query(None, description="Filter: want_to_read | reading | completed"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if status is not None and status not in VALID_READING_STATUSES:
+        raise HTTPException(
+            status_code=400, detail=f"status must be one of {sorted(VALID_READING_STATUSES)}"
+        )
+
+    query = db.query(ReadingHistory).filter(ReadingHistory.user_id == current_user.id)
+    if status is not None:
+        query = query.filter(ReadingHistory.status == ReadingStatus(status))
+    items = query.order_by(ReadingHistory.updated_at.desc()).all()
+
+    return ReadingHistoryResponse(
+        count=len(items), items=[_reading_history_out(h.book, h) for h in items]
+    )
+
+
+@router.put("/reading-status", response_model=ReadingHistoryItemOut)
+def set_reading_status(
+    payload: ReadingStatusUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.status not in VALID_READING_STATUSES:
+        raise HTTPException(
+            status_code=400, detail=f"status must be one of {sorted(VALID_READING_STATUSES)}"
+        )
+
+    book = db.query(Book).filter(Book.id == payload.book_id).first()
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    status_enum = ReadingStatus(payload.status)
+    now = datetime.now(timezone.utc)
+
+    entry = (
+        db.query(ReadingHistory)
+        .filter(ReadingHistory.user_id == current_user.id, ReadingHistory.book_id == book.id)
+        .first()
+    )
+    if entry is None:
+        entry = ReadingHistory(user_id=current_user.id, book_id=book.id, status=status_enum)
+        db.add(entry)
+    else:
+        entry.status = status_enum
+
+    if status_enum in (ReadingStatus.reading, ReadingStatus.completed) and entry.started_at is None:
+        entry.started_at = now
+    entry.completed_at = now if status_enum == ReadingStatus.completed else None
+
+    # Keep wishlist and tracker mutually exclusive: once a book is
+    # actively being read or finished, it's no longer just a "want to
+    # read" wishlist item. This is also what makes "move wishlist book
+    # to reading" work — it's just this same status update.
+    if status_enum in (ReadingStatus.reading, ReadingStatus.completed):
+        db.query(Wishlist).filter(
+            Wishlist.user_id == current_user.id, Wishlist.book_id == book.id
+        ).delete()
+
+    db.commit()
+    db.refresh(entry)
+    return _reading_history_out(book, entry)
+
+
+@router.delete("/reading-status/{book_id}", status_code=204)
+def remove_reading_status(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    entry = (
+        db.query(ReadingHistory)
+        .filter(ReadingHistory.user_id == current_user.id, ReadingHistory.book_id == book_id)
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Book is not being tracked")
+    db.delete(entry)
+    db.commit()
+    return None
 
 
 @router.get("/{book_id}", response_model=BookOut)

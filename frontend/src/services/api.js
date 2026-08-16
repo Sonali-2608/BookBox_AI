@@ -72,3 +72,21 @@ export const scannerApi = {
     });
   },
 };
+
+export const libraryApi = {
+  getWishlist: () => api.get("/books/wishlist"),
+  addToWishlist: (bookId) => api.post("/books/wishlist", { book_id: bookId }),
+  removeFromWishlist: (bookId) => api.delete(`/books/wishlist/${bookId}`),
+
+  getReadingHistory: (status) =>
+    api.get("/books/reading-status", { params: status ? { status } : {} }),
+  setReadingStatus: (bookId, status) =>
+    api.put("/books/reading-status", { book_id: bookId, status }),
+  removeReadingStatus: (bookId) => api.delete(`/books/reading-status/${bookId}`),
+};
+
+export const userApi = {
+  getPreferences: () => api.get("/user/preferences"),
+  updatePreferences: (data) => api.put("/user/preferences", data),
+  getAnalytics: () => api.get("/user/analytics"),
+};

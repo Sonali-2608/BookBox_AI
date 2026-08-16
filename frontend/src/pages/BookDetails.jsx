@@ -10,16 +10,16 @@ import {
   ArrowLeft,
   Sparkles,
 } from "lucide-react";
-import { booksApi, aiApi } from "../services/api.js";
+import { booksApi, aiApi, libraryApi } from "../services/api.js";
 import LoadingSkeleton from "../components/LoadingSkeleton.jsx";
 import RecommendationCarousel from "../components/RecommendationCarousel.jsx";
 
-function DisabledActionButton({ icon: Icon, label }) {
+function ActionButton({ icon: Icon, label, active, onClick, isLoading }) {
   return (
     <button
-      disabled
-      title="Coming once wishlist & reading tracking are built (Phase 9)"
-      className="ghost-btn cursor-not-allowed opacity-50"
+      onClick={onClick}
+      disabled={isLoading}
+      className={`${active ? "brass-btn" : "ghost-btn"} disabled:opacity-60`}
     >
       <Icon className="h-4 w-4" />
       {label}
@@ -48,6 +48,11 @@ export default function BookDetails() {
   const [summaryData, setSummaryData] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
+  const [inWishlist, setInWishlist] = useState(false);
+  const [readingStatus, setReadingStatus] = useState(null); // null | want_to_read | reading | completed
+  const [actionLoading, setActionLoading] = useState(null); // which action is in-flight
+  const [actionError, setActionError] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
     setStatus("loading");
@@ -56,6 +61,8 @@ export default function BookDetails() {
     setWhyLoading(true);
     setSummaryData(null);
     setSummaryLoading(true);
+    setInWishlist(false);
+    setReadingStatus(null);
 
     booksApi
       .getById(id)
@@ -64,8 +71,8 @@ export default function BookDetails() {
         setBook(res.data);
         setStatus("ready");
 
-        // These three are independent — fire in parallel, each with its
-        // own quiet failure so one slow/broken AI call doesn't block the
+        // These are independent — fire in parallel, each with its own
+        // quiet failure so one slow/broken call doesn't block the
         // others or the book itself from rendering.
         booksApi
           .getSimilar(id, 10)
@@ -83,6 +90,23 @@ export default function BookDetails() {
           .then((r) => !cancelled && setSummaryData(r.data))
           .catch(() => !cancelled && setSummaryData(null))
           .finally(() => !cancelled && setSummaryLoading(false));
+
+        libraryApi
+          .getWishlist()
+          .then((r) => {
+            if (cancelled) return;
+            setInWishlist(r.data.items.some((item) => item.book.id === Number(id)));
+          })
+          .catch(() => {});
+
+        libraryApi
+          .getReadingHistory()
+          .then((r) => {
+            if (cancelled) return;
+            const entry = r.data.items.find((item) => item.book.id === Number(id));
+            setReadingStatus(entry ? entry.status : null);
+          })
+          .catch(() => {});
       })
       .catch((err) => {
         if (cancelled) return;
@@ -93,6 +117,38 @@ export default function BookDetails() {
       cancelled = true;
     };
   }, [id]);
+
+  async function handleToggleWishlist() {
+    setActionLoading("wishlist");
+    setActionError(null);
+    try {
+      if (inWishlist) {
+        await libraryApi.removeFromWishlist(id);
+        setInWishlist(false);
+      } else {
+        await libraryApi.addToWishlist(id);
+        setInWishlist(true);
+      }
+    } catch {
+      setActionError("Something went wrong. Please try again.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleSetReadingStatus(newStatus) {
+    setActionLoading(newStatus);
+    setActionError(null);
+    try {
+      await libraryApi.setReadingStatus(id, newStatus);
+      setReadingStatus(newStatus);
+      setInWishlist(false); // backend clears the wishlist entry too
+    } catch {
+      setActionError("Something went wrong. Please try again.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
   if (status === "loading") {
     return (
@@ -184,10 +240,29 @@ export default function BookDetails() {
           )}
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <DisabledActionButton icon={Heart} label="Add to Wishlist" />
-            <DisabledActionButton icon={BookMarked} label="Mark as Reading" />
-            <DisabledActionButton icon={CheckCircle2} label="Mark as Completed" />
+            <ActionButton
+              icon={Heart}
+              label={inWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
+              active={inWishlist}
+              onClick={handleToggleWishlist}
+              isLoading={actionLoading === "wishlist"}
+            />
+            <ActionButton
+              icon={BookMarked}
+              label="Mark as Reading"
+              active={readingStatus === "reading"}
+              onClick={() => handleSetReadingStatus("reading")}
+              isLoading={actionLoading === "reading"}
+            />
+            <ActionButton
+              icon={CheckCircle2}
+              label="Mark as Completed"
+              active={readingStatus === "completed"}
+              onClick={() => handleSetReadingStatus("completed")}
+              isLoading={actionLoading === "completed"}
+            />
           </div>
+          {actionError && <p className="mt-2 text-xs text-brass-dark">{actionError}</p>}
 
           <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2">
             <div className="catalog-card p-5">
